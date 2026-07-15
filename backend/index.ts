@@ -17,11 +17,12 @@ async function signToken(userId: string) {
 type User = { id: string, username: string, password: string };
 const USERS: User[] = [];
 
-const STOCKS = [
+type Stock = { id: number; title: string; symbol: string };
+const STOCKS: Stock[] = [
     { id: 1, title: "AXIS BANK", symbol: "AXIS" },
     { id: 2, title: "HDFC BANK", symbol: "HDFC" },
     { id: 3, title: "TATA Steel", symbol: "TATA" },
-]
+];
 
 type Side = "buy" | "sell";
 type OrderType = "market" | "limit";
@@ -57,11 +58,10 @@ const BALANCES: Record<string, UserBalance> = {};
 
 
 type OrderBook = { bids: Record<number, Order[]>; asks: Record<number, Order[]> };
-const ORDERBOOKS: Record<string, OrderBook> = {
-    AXIS: { bids: {}, asks: {} },
-    HDFC: { bids: {}, asks: {} },
-    TATA: { bids: {}, asks: {} },
-};
+const ORDERBOOKS: Record<string, OrderBook> = {};
+for (const s of STOCKS) {
+    ORDERBOOKS[s.symbol] = {bids: {}, asks: {}};
+}
 
 app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
@@ -78,13 +78,14 @@ app.post("/signup", async (req, res) => {
 
     USERS.push({ id, username, password: passwordHash });
 
+    const stocks: Record<string, Balance> = {};
+    for (const s of STOCKS){
+        stocks[s.symbol] = {available: 0, locked: 0};
+    }
+
     BALANCES[id] = {
         usd: { available: 100000, locked: 0 },
-        stocks: {
-            AXIS: { available: 0, locked: 0 },
-            HDFC: { available: 0, locked: 0 },
-            TATA: { available: 0, locked: 0 },
-        },
+        stocks,
     };
 
     const token = await signToken(id);
