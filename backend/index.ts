@@ -60,7 +60,7 @@ const BALANCES: Record<string, UserBalance> = {};
 type OrderBook = { bids: Record<number, Order[]>; asks: Record<number, Order[]> };
 const ORDERBOOKS: Record<string, OrderBook> = {};
 for (const s of STOCKS) {
-    ORDERBOOKS[s.symbol] = {bids: {}, asks: {}};
+    ORDERBOOKS[s.symbol] = { bids: {}, asks: {} };
 }
 
 app.post("/signup", async (req, res) => {
@@ -79,8 +79,8 @@ app.post("/signup", async (req, res) => {
     USERS.push({ id, username, password: passwordHash });
 
     const stocks: Record<string, Balance> = {};
-    for (const s of STOCKS){
-        stocks[s.symbol] = {available: 0, locked: 0};
+    for (const s of STOCKS) {
+        stocks[s.symbol] = { available: 0, locked: 0 };
     }
 
     BALANCES[id] = {
@@ -126,7 +126,7 @@ async function requireAuth(req: any, res: any, next: any) {
     }
 }
 
-function settle (buyOrder: Order, sellOrder: Order, tradePrice: number, tradeQty: number, symbol: string){
+function settle(buyOrder: Order, sellOrder: Order, tradePrice: number, tradeQty: number, symbol: string) {
 }
 
 app.post("/order", requireAuth, (req: any, res) => {
@@ -172,7 +172,7 @@ app.post("/order", requireAuth, (req: any, res) => {
     }
 
     if (side === "sell") {
-        const stockBal = balance.stocks[market_id];
+        const stockBal = balance.stocks[market_id]; //stockBal gets a ptr to the obj
         if (!stockBal) {
             return res.status(400).json({ error: "no balance for this stock." });
         }
@@ -183,6 +183,80 @@ app.post("/order", requireAuth, (req: any, res) => {
         stockBal.available -= qty;
         stockBal.locked += qty;
     }
+
+    const orderId = crypto.randomUUID();
+    const order: Order = {
+        id: orderId,
+        userId,
+        symbol: market_id,
+        side,
+        type,
+        price,
+        qty,
+        filledQty: 0,
+        status: "open"
+    }
+    let remaining = qty;
+    let tradedValue = 0; // summatio of (tradePrice x tradeQty) - for avg price
+
+    const makerSide = side === "buy" ? book.asks : book.bids;
+    const prices = Object.keys(makerSide).map(Number).sort((a, b) => (side === "buy" ? a - b : b - a)); //buy is low to high, sell is high to low
+
+    for (const level of prices) {
+        if (remaining === 0) break;
+        if (side === "buy" && level > price) break;
+        if (side === "sell" && level < price) break;
+
+        const queue = makerSide[level];
+        if (!queue) continue;
+
+        while (queue.length > 0 && remaining > 0) {
+            const maker = queue[0]!;
+            const makerRemaining = maker.qty = maker.filledQty;
+
+            const tradeQty = Math.min(remaining, makerRemaining);
+            const tradePrice = level; // trade at makeer's price
+
+            const buyOrder = side === "buy" ? order : maker;
+            const sellOrder = side === "buy" ? maker : order;
+
+            FILLS.push({
+                id: crypto.randomUUID(), symbol: market_id, price: tradePrice, qty: tradeQty,
+                buyOrderId: buyOrder.id, sellOrderId: sellOrder.id,
+                buyerId: buyOrder.userId, sellerId: sellOrder.userId,
+            });
+
+            settle(buyOrder, sellOrder, tradePrice, tradeQty, market_id);  // empty for now
+
+            order.filledQty += tradeQty;
+            maker.filledQty += tradeQty;
+            remaining -= tradeQty;
+            tradedValue += tradePrice * tradeQty;
+
+            if (maker.filledQty === maker.qty) {
+                maker.status = "filled";
+                queue.shift();
+            } else {
+                maker.status = "partially_filled";
+            }
+        }
+
+        if (queue.length === 0) delete makerSide[level];
+    }
+     if (order.filledQty === 0) order.status = "open";
+    else if (order.filledQty < order.qty) order.status = "partially_filled";
+    else order.status = "filled";
+
+    // rest the leftover on OUR side
+    if (remaining > 0) {
+        const ourSide = side === "buy" ? book.bids : book.asks;
+        if (!ourSide[price]) ourSide[price] = [];
+        ourSide[price]!.push(order);
+    }
+
+    ORDERS.push(order);
+    const averagePrice = order.filledQty > 0 ? tradedValue / order.filledQty : 0;
+    return res.json({ orderId, filledQty: order.filledQty, averagePrice });
 })
 
 app.get("/order/:orderId", (req, res) => res.status(501).json({ error: "not implemented" }));
