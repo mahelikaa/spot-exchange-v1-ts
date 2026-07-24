@@ -126,7 +126,69 @@ async function requireAuth(req: any, res: any, next: any) {
     }
 }
 
-function settle(buyOrder: Order, sellOrder: Order, tradePrice: number, tradeQty: number, symbol: string) {
+function settle(
+    buyOrder: Order,
+    sellOrder: Order,
+    tradePrice: number,
+    tradeQty: number,
+    symbol: string
+) {
+    const buyerBalance = BALANCES[buyOrder.userId];
+    const sellerBalance = BALANCES[sellOrder.userId];
+
+    if (!buyerBalance) {
+        throw new Error(`Missing balance for buyer ${buyOrder.userId}`);
+    }
+
+    if (!sellerBalance) {
+        throw new Error(`Missing balance for seller ${sellOrder.userId}`);
+    }
+
+    const buyerStock = buyerBalance.stocks[symbol];
+    const sellerStock = sellerBalance.stocks[symbol];
+
+    if (!buyerStock) {
+        throw new Error(`Buyer has no ${symbol} balance`);
+    }
+
+    if (!sellerStock) {
+        throw new Error(`Seller has no ${symbol} balance`);
+    }
+
+    if (buyOrder.price === null) {
+        throw new Error("Market buy orders are not supported");
+    }
+
+    if (tradeQty <= 0) {
+        throw new Error("Trade quantity must be positive");
+    }
+
+    if (tradePrice <= 0) {
+        throw new Error("Trade price must be positive");
+    }
+    const reservedAmount = buyOrder.price * tradeQty;
+    const actualTradeValue = tradePrice * tradeQty;
+    const buyerRefund = reservedAmount - actualTradeValue;
+
+    if (buyerRefund < 0) {
+        throw new Error(
+            `Trade price ${tradePrice} exceeds buyer limit ${buyOrder.price}`
+        );
+    }
+
+    if (buyerBalance.usd.locked < reservedAmount) {
+        throw new Error("Buyer has insufficient locked USD");
+    }
+
+    if (sellerStock.locked < tradeQty) {
+        throw new Error("Seller has insufficient locked stock");
+    }
+
+    buyerBalance.usd.locked -= reservedAmount;
+    buyerBalance.usd.available += buyerRefund;
+    buyerStock.available += tradeQty;
+    sellerStock.locked -= tradeQty;
+    sellerBalance.usd.available += actualTradeValue;
 }
 
 app.post("/order", requireAuth, (req: any, res) => {
@@ -212,7 +274,7 @@ app.post("/order", requireAuth, (req: any, res) => {
 
         while (queue.length > 0 && remaining > 0) {
             const maker = queue[0]!;
-            const makerRemaining = maker.qty = maker.filledQty;
+            const makerRemaining = maker.qty - maker.filledQty;
 
             const tradeQty = Math.min(remaining, makerRemaining);
             const tradePrice = level; // trade at makeer's price
@@ -220,13 +282,18 @@ app.post("/order", requireAuth, (req: any, res) => {
             const buyOrder = side === "buy" ? order : maker;
             const sellOrder = side === "buy" ? maker : order;
 
-            FILLS.push({
-                id: crypto.randomUUID(), symbol: market_id, price: tradePrice, qty: tradeQty,
-                buyOrderId: buyOrder.id, sellOrderId: sellOrder.id,
-                buyerId: buyOrder.userId, sellerId: sellOrder.userId,
-            });
+            settle(buyOrder, sellOrder, tradePrice, tradeQty, market_id); 
 
-            settle(buyOrder, sellOrder, tradePrice, tradeQty, market_id);  // empty for now
+            FILLS.push({
+                id: crypto.randomUUID(), 
+                symbol: market_id, 
+                price: tradePrice, 
+                qty: tradeQty,
+                buyOrderId: buyOrder.id, 
+                sellOrderId: sellOrder.id,
+                buyerId: buyOrder.userId, 
+                sellerId: sellOrder.userId,
+            });
 
             order.filledQty += tradeQty;
             maker.filledQty += tradeQty;
@@ -243,7 +310,7 @@ app.post("/order", requireAuth, (req: any, res) => {
 
         if (queue.length === 0) delete makerSide[level];
     }
-     if (order.filledQty === 0) order.status = "open";
+    if (order.filledQty === 0) order.status = "open";
     else if (order.filledQty < order.qty) order.status = "partially_filled";
     else order.status = "filled";
 
