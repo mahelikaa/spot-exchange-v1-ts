@@ -282,16 +282,16 @@ app.post("/order", requireAuth, (req: any, res) => {
             const buyOrder = side === "buy" ? order : maker;
             const sellOrder = side === "buy" ? maker : order;
 
-            settle(buyOrder, sellOrder, tradePrice, tradeQty, market_id); 
+            settle(buyOrder, sellOrder, tradePrice, tradeQty, market_id);
 
             FILLS.push({
-                id: crypto.randomUUID(), 
-                symbol: market_id, 
-                price: tradePrice, 
+                id: crypto.randomUUID(),
+                symbol: market_id,
+                price: tradePrice,
                 qty: tradeQty,
-                buyOrderId: buyOrder.id, 
+                buyOrderId: buyOrder.id,
                 sellOrderId: sellOrder.id,
-                buyerId: buyOrder.userId, 
+                buyerId: buyOrder.userId,
                 sellerId: sellOrder.userId,
             });
 
@@ -329,10 +329,42 @@ app.post("/order", requireAuth, (req: any, res) => {
 app.get("/order/:orderId", (req, res) => res.status(501).json({ error: "not implemented" }));
 app.delete("/order/:orderId", (req, res) => res.status(501).json({ error: "not implemented" }));
 app.get("/depth/:symbol", (req, res) => res.status(501).json({ error: "not implemented" }));
-app.get("/orders", (req, res) => res.status(501).json({ error: "not implemented" }));
+
+
+app.get("/orders", requireAuth, (req: any, res) => {
+    const userId = req.userId;
+    const userOrders = ORDERS.filter((order) => order.userId === userId);
+    return res.json(userOrders);
+});
+
 app.get("/fills", (req, res) => res.status(501).json({ error: "not implemented" }));
-app.get("/balance/usd", (req, res) => res.status(501).json({ error: "not implemented" }));
-app.get("/balance", (req, res) => res.status(501).json({ error: "not implemented" }));
+
+
+app.get("/balance/usd", requireAuth, (req: any, res) => {
+    const userId = req.userId;
+    const balance = BALANCES[userId];
+
+    if (!balance) {
+        return res.status(404).json({
+            error: "balance not found",
+        });
+    }
+
+    return res.json(balance.usd);
+
+});
+
+app.get("/balance", requireAuth, (req: any, res) => {
+    const userId = req.userId;
+    const balance = BALANCES[userId];
+    if (!balance) {
+        return res.status(404).json({
+            error: "balance not found",
+        });
+    }
+
+    return res.json(balance);
+});
 
 
 app.listen(3000);
