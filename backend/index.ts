@@ -26,7 +26,7 @@ const STOCKS: Stock[] = [
 
 type Side = "buy" | "sell";
 type OrderType = "market" | "limit";
-type OrderStatus = "open" | "partially_filled" | "filled";
+type OrderStatus = "open" | "partially_filled" | "filled" | "cancelled";
 type Order = {
     id: string,
     userId: string,
@@ -326,9 +326,149 @@ app.post("/order", requireAuth, (req: any, res) => {
     return res.json({ orderId, filledQty: order.filledQty, averagePrice });
 })
 
-app.get("/order/:orderId", (req, res) => res.status(501).json({ error: "not implemented" }));
-app.delete("/order/:orderId", (req, res) => res.status(501).json({ error: "not implemented" }));
-app.get("/depth/:symbol", (req, res) => res.status(501).json({ error: "not implemented" }));
+app.get("/order/:orderId", requireAuth, (req: any, res) => {
+    const orderId = req.params.orderId;
+    const userId = req.userId;
+    const order = ORDERS.find((order) => order.id === orderId && order.userId === userId);
+
+    if (!order) {
+        return res.status(404).json({
+            error: "order not found",
+        });
+    }
+
+    return res.json(order);
+});
+
+app.delete("/order/:orderId", requireAuth, (req: any, res) => {
+    const userId = req.userId;
+    const orderId = req.params.orderId;
+
+    const order = ORDERS.find(
+        (order) => order.id === orderId && order.userId === userId
+    );
+
+    if (!order) {
+        return res.status(404).json({
+            error: "order not found",
+        });
+    }
+
+    if (order.status === "filled" || order.status === "cancelled") {
+        return res.status(400).json({
+            error: "order cannot be cancelled",
+        });
+    }
+
+    const book = ORDERBOOKS[order.symbol];
+    const balance = BALANCES[userId];
+
+    if (!book || !balance || order.price === null) {
+        return res.status(500).json({
+            error: "invalid order state",
+        });
+    }
+
+    const remainingQty = order.qty - order.filledQty;
+    const side = order.side === "buy" ? book.bids : book.asks;
+    const queue = side[order.price];
+
+    const orderIndex =
+        queue?.findIndex(
+            (queuedOrder) => queuedOrder.id === order.id
+        ) ?? -1;
+
+    if (!queue || orderIndex === -1) {
+        return res.status(500).json({
+            error: "order is missing from order book",
+        });
+    }
+
+    if (order.side === "buy") {
+        const unlockAmount = order.price * remainingQty;
+
+        if (balance.usd.locked < unlockAmount) {
+            return res.status(500).json({
+                error: "insufficient locked USD",
+            });
+        }
+
+        balance.usd.locked -= unlockAmount;
+        balance.usd.available += unlockAmount;
+    } else {
+        const stockBalance = balance.stocks[order.symbol];
+
+        if (!stockBalance || stockBalance.locked < remainingQty) {
+            return res.status(500).json({
+                error: "insufficient locked stock",
+            });
+        }
+
+        stockBalance.locked -= remainingQty;
+        stockBalance.available += remainingQty;
+    }
+
+    queue.splice(orderIndex, 1);
+
+    if (queue.length === 0) {
+        delete side[order.price];
+    }
+
+    order.status = "cancelled";
+
+    return res.json({
+        orderId: order.id,
+        status: order.status,
+        cancelledQty: remainingQty,
+    });
+});
+
+app.get("/depth/:symbol", (req, res) => {
+    const symbol = req.params.symbol;
+    const book = ORDERBOOKS[symbol];
+
+    if (!book) {
+        return res.status(404).json({
+            error: "market not found",
+        });
+    }
+
+    const bids = Object.entries(book.bids)
+        .map(([price, orders]) => {
+            const qty = orders.reduce(
+                (total, order) =>
+                    total + (order.qty - order.filledQty),
+                0
+            );
+
+            return {
+                price: Number(price),
+                qty,
+            };
+        })
+        .sort((a, b) => b.price - a.price);
+
+    const asks = Object.entries(book.asks)
+        .map(([price, orders]) => {
+            const qty = orders.reduce(
+                (total, order) =>
+                    total + (order.qty - order.filledQty),
+                0
+            );
+
+            return {
+                price: Number(price),
+                qty,
+            };
+        })
+        .sort((a, b) => a.price - b.price);
+
+    return res.json({
+        symbol,
+        bids,
+        asks,
+    });
+});
 
 
 app.get("/orders", requireAuth, (req: any, res) => {
@@ -337,7 +477,12 @@ app.get("/orders", requireAuth, (req: any, res) => {
     return res.json(userOrders);
 });
 
-app.get("/fills", (req, res) => res.status(501).json({ error: "not implemented" }));
+app.get("/fills", requireAuth, (req: any, res) => {
+    const userId = req.userId;
+    const fills = FILLS.filter((fill) => fill.buyerId === userId || fill.sellerId === userId);
+
+    return res.json(fills);
+});
 
 
 app.get("/balance/usd", requireAuth, (req: any, res) => {
