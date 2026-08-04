@@ -1,5 +1,4 @@
 import express from "express";
-import { SignJWT, jwtVerify } from "jose";
 import type {
     Order,
     Balance,
@@ -13,19 +12,13 @@ import {
     ORDERBOOKS,
 } from "./src/state.ts";
 import "./src/redis/client.ts";
+import {
+    signToken,
+    requireAuth,
+} from "./src/middleware/auth.ts";
 
 const app = express();
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 app.use(express.json());
-
-async function signToken(userId: string) {
-    return await new SignJWT({ userId })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("24h")
-        .sign(JWT_SECRET);
-}
-
 
 app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
@@ -73,22 +66,6 @@ app.post("/signin", async (req, res) => {
     const token = await signToken(user.id);
     return res.json({ userId: user.id, token });
 });
-
-async function requireAuth(req: any, res: any, next: any) {
-    const header = req.header("authorization");
-    const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-
-    if (!token) {
-        return res.status(401).json({ error: "missing token" });
-    }
-    try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        (req as any).userId = payload.userId as string;
-        next();
-    } catch {
-        return res.status(401).json({ error: "invalid or expired token" });
-    }
-}
 
 function settle(
     buyOrder: Order,
