@@ -14,11 +14,13 @@ import {
 } from "./src/middleware/auth.ts";
 import { authRouter } from "./src/routes/auth.ts";
 import { balanceRouter } from "./src/routes/balances.ts";
+import { marketRouter } from "./src/routes/market.ts";
 
 const app = express();
 app.use(express.json());
 app.use(authRouter);
 app.use(balanceRouter);
+app.use(marketRouter);
 
 function settle(
     buyOrder: Order,
@@ -316,54 +318,6 @@ app.delete("/order/:orderId", requireAuth, (req: any, res) => {
         cancelledQty: remainingQty,
     });
 });
-
-app.get("/depth/:symbol", (req, res) => {
-    const symbol = req.params.symbol;
-    const book = ORDERBOOKS[symbol];
-
-    if (!book) {
-        return res.status(404).json({
-            error: "market not found",
-        });
-    }
-
-    const bids = Object.entries(book.bids)
-        .map(([price, orders]) => {
-            const qty = orders.reduce(
-                (total, order) =>
-                    total + (order.qty - order.filledQty),
-                0
-            );
-
-            return {
-                price: Number(price),
-                qty,
-            };
-        })
-        .sort((a, b) => b.price - a.price);
-
-    const asks = Object.entries(book.asks)
-        .map(([price, orders]) => {
-            const qty = orders.reduce(
-                (total, order) =>
-                    total + (order.qty - order.filledQty),
-                0
-            );
-
-            return {
-                price: Number(price),
-                qty,
-            };
-        })
-        .sort((a, b) => a.price - b.price);
-
-    return res.json({
-        symbol,
-        bids,
-        asks,
-    });
-});
-
 
 app.get("/orders", requireAuth, (req: any, res) => {
     const userId = req.userId;
