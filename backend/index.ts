@@ -1,6 +1,5 @@
 import express from "express";
 import { SignJWT, jwtVerify } from "jose";
-import { createClient } from "redis";
 import type {
     Order,
     Balance,
@@ -13,25 +12,11 @@ import {
     BALANCES,
     ORDERBOOKS,
 } from "./src/state.ts";
-
-const redisClient = createClient({
-    url: process.env.REDIS_URL ?? "redis://localhost:6379",
-});
-
-redisClient.on("error", (error) => {
-    console.error("Redis error: ", error);
-});
-
-await redisClient.connect();
-
-// await redisClient.set("spot:health", "connected");
-// const redisStatus = await redisClient.get("spot:health");
-// console.log("Redis status: ", redisStatus);
+import "./src/redis/client.ts";
 
 const app = express();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 app.use(express.json());
-
 
 async function signToken(userId: string) {
     return await new SignJWT({ userId })
