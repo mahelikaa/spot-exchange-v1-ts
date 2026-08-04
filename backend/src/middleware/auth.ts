@@ -1,6 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+    throw new Error("JWT_SECRET is required");
+}
+
+const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
 export async function signToken(userId: string) {
     return await new SignJWT({ userId })
