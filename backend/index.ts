@@ -1,6 +1,18 @@
 import express from "express";
 import { SignJWT, jwtVerify } from "jose";
 import { createClient } from "redis";
+import type {
+    Order,
+    Balance,
+} from "./src/domain/models.ts";
+import {
+    USERS,
+    STOCKS,
+    ORDERS,
+    FILLS,
+    BALANCES,
+    ORDERBOOKS,
+} from "./src/state.ts";
 
 const redisClient = createClient({
     url: process.env.REDIS_URL ?? "redis://localhost:6379",
@@ -29,54 +41,6 @@ async function signToken(userId: string) {
         .sign(JWT_SECRET);
 }
 
-type User = { id: string, username: string, password: string };
-const USERS: User[] = [];
-
-type Stock = { id: number; title: string; symbol: string };
-const STOCKS: Stock[] = [
-    { id: 1, title: "AXIS BANK", symbol: "AXIS" },
-    { id: 2, title: "HDFC BANK", symbol: "HDFC" },
-    { id: 3, title: "TATA Steel", symbol: "TATA" },
-];
-
-type Side = "buy" | "sell";
-type OrderType = "market" | "limit";
-type OrderStatus = "open" | "partially_filled" | "filled" | "cancelled";
-type Order = {
-    id: string,
-    userId: string,
-    symbol: string,
-    side: Side,
-    type: OrderType,
-    price: number | null, //null for market order.
-    qty: number, // amount requested.
-    filledQty: number, //amount matched so far
-    status: OrderStatus,
-}
-const ORDERS: Order[] = [];
-
-type Fill = {
-    id: string,
-    symbol: string,
-    price: number,
-    qty: number,
-    buyOrderId: string,
-    sellOrderId: string,
-    buyerId: string,
-    sellerId: string,
-}
-const FILLS: Fill[] = [];
-
-type Balance = { available: number; locked: number };
-type UserBalance = { usd: Balance; stocks: Record<string, Balance> };
-const BALANCES: Record<string, UserBalance> = {};
-
-
-type OrderBook = { bids: Record<number, Order[]>; asks: Record<number, Order[]> };
-const ORDERBOOKS: Record<string, OrderBook> = {};
-for (const s of STOCKS) {
-    ORDERBOOKS[s.symbol] = { bids: {}, asks: {} };
-}
 
 app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
