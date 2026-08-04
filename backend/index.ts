@@ -13,10 +13,12 @@ import {
     requireAuth,
 } from "./src/middleware/auth.ts";
 import { authRouter } from "./src/routes/auth.ts";
+import { balanceRouter } from "./src/routes/balances.ts";
 
 const app = express();
 app.use(express.json());
 app.use(authRouter);
+app.use(balanceRouter);
 
 function settle(
     buyOrder: Order,
@@ -375,33 +377,5 @@ app.get("/fills", requireAuth, (req: any, res) => {
 
     return res.json(fills);
 });
-
-
-app.get("/balance/usd", requireAuth, (req: any, res) => {
-    const userId = req.userId;
-    const balance = BALANCES[userId];
-
-    if (!balance) {
-        return res.status(404).json({
-            error: "balance not found",
-        });
-    }
-
-    return res.json(balance.usd);
-
-});
-
-app.get("/balance", requireAuth, (req: any, res) => {
-    const userId = req.userId;
-    const balance = BALANCES[userId];
-    if (!balance) {
-        return res.status(404).json({
-            error: "balance not found",
-        });
-    }
-
-    return res.json(balance);
-});
-
 
 app.listen(3000);
