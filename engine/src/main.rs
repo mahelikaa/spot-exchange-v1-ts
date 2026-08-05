@@ -1,4 +1,5 @@
 mod commands;
+mod events;
 mod models;
 
 fn main() {

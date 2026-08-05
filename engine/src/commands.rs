@@ -1,7 +1,6 @@
+use crate::models::{OrderType, Side};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use crate::models::{OrderType, Side};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
