@@ -16,6 +16,24 @@ pub enum EngineError {
 
     #[error("price must be greater than zero")]
     InvalidPrice,
+
+    #[error("deposit amount must be greater than zero")]
+    InvalidAmount,
+
+    #[error("balance arithmetic overflow")]
+    ArithmeticOverflow,
+
+    #[error("user balance not found")]
+    BalanceNotFound,
+
+    #[error("insufficient available USD")]
+    InsufficientUsd,
+
+    #[error("insufficient available stock: {0}")]
+    InsufficientStock(String),
+
+    #[error("insufficient locked balance")]
+    InsufficientLockedBalance,
 }
 
 pub type EngineResult<T> = Result<T, EngineError>;

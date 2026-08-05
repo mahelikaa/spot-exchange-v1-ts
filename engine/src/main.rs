@@ -1,3 +1,4 @@
+mod balances;
 mod commands;
 mod error;
 mod events;
