@@ -144,7 +144,7 @@ mod tests {
         let mut store = BalanceStore::new();
         let user_id = Uuid::new_v4();
 
-        store.deposit(user_id.clone(), "USD", 1_000).unwrap();
+        store.deposit(user_id, "USD", 1_000).unwrap();
         store.lock_usd(&user_id, 400).unwrap();
         store.unlock_usd(&user_id, 100).unwrap();
 
@@ -159,7 +159,7 @@ mod tests {
         let mut store = BalanceStore::new();
         let user_id = Uuid::new_v4();
 
-        store.deposit(user_id.clone(), "AXIS", 50).unwrap();
+        store.deposit(user_id, "AXIS", 50).unwrap();
         store.lock_stock(&user_id, "AXIS", 20).unwrap();
         store.unlock_stock(&user_id, "AXIS", 5).unwrap();
 
